@@ -1,0 +1,50 @@
+# ingress-nginx-values.yaml
+#
+# This file configures the ingress-nginx CONTROLLER — the cluster-wide component
+# that sits in front of all your services and handles incoming traffic before it
+# reaches either the default or hardened Bitnami NGINX deployment.
+#
+# ARCHITECTURE REMINDER:
+#   Internet → ingress-nginx controller (this file) → Bitnami NGINX → mock-app
+#
+
+# HOW IT WORKS:
+#   Helm translates this config block into a Kubernetes ConfigMap called
+#   ingress-nginx-controller in the ingress-nginx namespace. The controller
+#   reads this ConfigMap at startup and writes the values into its nginx.conf.
+#   You can inspect the result with:
+#     kubectl get configmap ingress-nginx-controller -n ingress-nginx -o yaml
+#
+controller:
+  config:
+    # TLS 1.3 only. Default is TLS 1.2 + 1.3. TLS 1.2 is vulnerable to BEAST
+    # and cipher downgrade attacks. TLS 1.3 fixes this by removing negotiable
+    # cipher suites entirely. Trade-off: breaks legacy clients.
+    ssl-protocols: "TLSv1.3"
+
+    # ECDHE + CHACHA20 suites only — all provide Perfect Forward Secrecy.
+    # Default includes weak suites (AES128-SHA, DES-CBC3-SHA) that have no PFS,
+    # meaning past sessions could be decrypted if the private key is compromised.
+    ssl-ciphers: "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256"
+
+    # Server picks the cipher, not the client. Prevents a weak client from
+    # negotiating a downgraded cipher. No effect on TLS 1.3 (suites are fixed)
+    # but acts as a safety net if TLS 1.2 is ever re-enabled.
+    ssl-prefer-server-ciphers: "true"
+
+    # HSTS: tells browsers to enforce HTTPS-only for 1 year. Without this an
+    # attacker can SSL-strip the initial HTTP request before the redirect fires.
+    hsts: "true"
+    hsts-max-age: "31536000"
+    hsts-include-subdomains: "true"
+
+    # HSTS preload: enforces HTTPS even on the very first visit by being baked
+    # into browser vendor lists. Note: only works with real public domains —
+    # has no practical effect on our local nginx.local test domain.
+    hsts-preload: "true"
+
+    # OCSP stapling: server pre-fetches cert revocation status and attaches it
+    # to the handshake, removing a client round-trip to the CA and reducing
+    # TLS handshake time. Note: silently ignored with self-signed certs since
+    # there is no CA or OCSP responder URL — would be active in production.
+    enable-ocsp: "true"
