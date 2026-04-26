@@ -1,0 +1,12 @@
+{
+  "name": "mock-vulnerable-app",
+  "version": "1.0.0",
+  "description": "Intentionally vulnerable app for Kubernetes ingress security testing",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

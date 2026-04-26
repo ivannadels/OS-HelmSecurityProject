@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>VulnShop — Security Test Target</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <div class="logo">VULN<span>SHOP</span></div>
+      <div class="badge">⚠ Security Test Target</div>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <h1>Mock Attack Surface</h1>
+      <p class="subtitle">Intentionally vulnerable app for Kubernetes Ingress Security testing.<br>
+      Deploy behind NGINX default or hardened configuration and observe the difference.</p>
+    </section>
+
+    <div class="panels">
+
+      <!-- SQL Injection + XSS -->
+      <div class="panel" id="search-panel">
+        <div class="panel-tag">SQLi + XSS</div>
+        <h2>Product Search</h2>
+        <p class="desc">Input is reflected into an unescaped HTML response and interpolated
+        into a SQL query string without parameterisation.</p>
+        <div class="payloads">
+          <span class="payload-label">Try:</span>
+          <code onclick="setSearch(this)">' OR '1'='1</code>
+          <code onclick="setSearch(this)">&lt;script&gt;alert(document.cookie)&lt;/script&gt;</code>
+          <code onclick="setSearch(this)">' UNION SELECT * FROM users--</code>
+        </div>
+        <form action="/search" method="GET">
+          <input type="text" name="q" id="search-input" placeholder="Search products..." />
+          <button type="submit">Search</button>
+        </form>
+      </div>
+
+      <!-- Path Traversal -->
+      <div class="panel" id="files-panel">
+        <div class="panel-tag">Path Traversal</div>
+        <h2>File Viewer</h2>
+        <p class="desc">The <code>name</code> parameter is joined onto the base path without
+        sanitisation, allowing directory traversal attacks.</p>
+        <div class="payloads">
+          <span class="payload-label">Try:</span>
+          <code onclick="setFile(this)">../../etc/passwd</code>
+          <code onclick="setFile(this)">../../etc/hostname</code>
+          <code onclick="setFile(this)">../server.js</code>
+        </div>
+        <form action="/files" method="GET">
+          <input type="text" name="name" id="file-input" placeholder="readme.txt" />
+          <button type="submit">Read File</button>
+        </form>
+      </div>
+
+      <!-- POST SQLi -->
+      <div class="panel" id="login-panel">
+        <div class="panel-tag">POST SQLi</div>
+        <h2>Login</h2>
+        <p class="desc">Username is interpolated into a SQL query via a POST body —
+        tests whether WAF inspects request bodies, not just query strings.</p>
+        <div class="payloads">
+          <span class="payload-label">Try:</span>
+          <code onclick="setLogin(this)">admin' --</code>
+          <code onclick="setLogin(this)">' OR '1'='1' --</code>
+        </div>
+        <form id="login-form">
+          <input type="text" id="username" placeholder="Username" />
+          <input type="password" id="password" placeholder="Password" />
+          <button type="button" onclick="doLogin()">Login</button>
+        </form>
+        <pre id="login-result" class="result-box hidden"></pre>
+      </div>
+
+      <!-- Metrics -->
+      <div class="panel" id="metrics-panel">
+        <div class="panel-tag">Benchmarking</div>
+        <h2>Live Metrics</h2>
+        <p class="desc">Shows requests that actually reached the backend.
+        Compare with total requests sent to measure WAF/rate-limit block rate.</p>
+        <button onclick="loadMetrics()">Refresh Metrics</button>
+        <pre id="metrics-box" class="result-box">Click to load...</pre>
+      </div>
+
+    </div>
+  </main>
+
+  <script>
+    function setSearch(el) {
+      document.getElementById('search-input').value = el.innerText;
+    }
+    function setFile(el) {
+      document.getElementById('file-input').value = el.innerText;
+    }
+    function setLogin(el) {
+      document.getElementById('username').value = el.innerText;
+    }
+
+    async function doLogin() {
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const box = document.getElementById('login-result');
+      try {
+        const res = await fetch('/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+        });
+        const data = await res.json();
+        box.textContent = JSON.stringify(data, null, 2);
+        box.className = 'result-box ' + (data.authenticated ? 'danger' : 'safe');
+      } catch (e) {
+        box.textContent = 'Request blocked or failed: ' + e.message;
+        box.className = 'result-box danger';
+      }
+    }
+
+    async function loadMetrics() {
+      const box = document.getElementById('metrics-box');
+      try {
+        const res  = await fetch('/metrics');
+        const data = await res.json();
+        box.textContent = JSON.stringify(data, null, 2);
+        box.className = 'result-box safe';
+      } catch (e) {
+        box.textContent = 'Could not load metrics: ' + e.message;
+        box.className = 'result-box danger';
+      }
+    }
+  </script>
+</body>
+</html>

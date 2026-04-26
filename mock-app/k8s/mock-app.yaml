@@ -1,0 +1,128 @@
+# k8s/mock-app.yaml
+#
+# Deploy the mock vulnerable app into both namespaces.
+# Apply with:
+#   kubectl apply -f k8s/mock-app.yaml -n nginx-default
+#   kubectl apply -f k8s/mock-app.yaml -n nginx-hardened
+#
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mock-backend
+  labels:
+    app: mock-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mock-backend
+  template:
+    metadata:
+      labels:
+        app: mock-backend   # ← must match networkPolicy podSelector
+    spec:
+      # Why automountServiceAccountToken false:
+      # The app doesn't need Kubernetes API access. Mounting the token
+      # gives a post-exploitation attacker a credential to enumerate the cluster.
+      automountServiceAccountToken: false
+
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: mock-backend
+          # Replace with your image after docker build & push:
+          # docker build -t your-registry/mock-app:latest .
+          # docker push your-registry/mock-app:latest
+          image: your-registry/mock-app:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+
+          env:
+            - name: PORT
+              value: "3000"
+            - name: NODE_ENV
+              # Why production: disables Express error stack traces in responses,
+              # which would otherwise leak internal paths — realistic behaviour.
+              value: "production"
+
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1001
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            privileged: false
+            capabilities:
+              drop: ["ALL"]
+              add: []
+            seccompProfile:
+              type: RuntimeDefault
+
+          # Why resource limits: without them a DDoS test can starve the node.
+          # The mock app is simple — 128Mi / 200m is plenty under normal load.
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+
+          # Why these probes:
+          # Liveness  → restart the pod if it hangs (e.g. event loop blocked by DDoS)
+          # Readiness → stop sending traffic if the pod isn't ready yet
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 3
+            periodSeconds: 5
+
+          # Why these volume mounts:
+          # readOnlyRootFilesystem=true means the container can't write anywhere.
+          # Node.js and Express need a writable /tmp for temp files.
+          # The /app/public/files dir must be writable (server.js creates files there).
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: files-dir
+              mountPath: /app/public/files
+
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: files-dir
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mock-backend
+  labels:
+    app: mock-backend
+spec:
+  selector:
+    app: mock-backend
+  ports:
+    - protocol: TCP
+      port: 3000
+      targetPort: 3000
+  # ClusterIP: only reachable within the cluster.
+  # NGINX will proxy to this service — external traffic never hits it directly.
+  type: ClusterIP
