@@ -763,54 +763,64 @@ networkPolicy:
   ## @param networkPolicy.enabled Specifies whether a NetworkPolicy should be created
   ##
   enabled: true
+
+
   ## @param networkPolicy.allowExternal Don't require server label for connections
   ## The Policy model to apply. When set to false, only pods with the correct
   ## server label will have network access to the ports server is listening
   ## on. When true, server will accept connections from any source
   ## (with the correct destination port).
   ##
-  allowExternal: true
+  # OS: We are setting this to false, such that when we run DDos attack, compromised pods are not
+  # able to be used as internal flood sources
+
+
+  allowExternal: false
+
+
   ## @param networkPolicy.allowExternalEgress Allow the pod to access any range of port and all destinations.
   ##
-  allowExternalEgress: true
+  # After a successful SQL injection or path traversal leading to RCE, the first thing an attacker does is
+  # curl a C2 server or probe the cloud metadata endpoint. This will close that door entirely.
+  allowExternalEgress: false
+ 
   ## @param networkPolicy.extraIngress [array] Add extra ingress rules to the NetworkPolicy
-  ## e.g:
-  ## extraIngress:
-  ##   - ports:
-  ##       - port: 1234
-  ##     from:
-  ##       - podSelector:
-  ##           - matchLabels:
-  ##               - role: frontend
-  ##       - podSelector:
-  ##           - matchExpressions:
-  ##               - key: role
-  ##                 operator: In
-  ##                 values:
-  ##                   - frontend
-  extraIngress: []
+  # we need to make sure inbound traffic can only come from the ingress-nginx namespace
+  # this is so external requests pass through out rate limiting and WAF
+  extraIngress:
+    - ports:
+        - port: 8080
+        - port: 8443
+      from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+
+
   ## @param networkPolicy.extraEgress [array] Add extra ingress rules to the NetworkPolicy (ignored if allowExternalEgress=true)
-  ## e.g:
-  ## extraEgress:
-  ##   - ports:
-  ##       - port: 1234
-  ##     to:
-  ##       - podSelector:
-  ##           - matchLabels:
-  ##               - role: frontend
-  ##       - podSelector:
-  ##           - matchExpressions:
-  ##               - key: role
-  ##                 operator: In
-  ##                 values:
-  ##                   - frontend
-  ##
-  extraEgress: []
-  ## @param networkPolicy.ingressNSMatchLabels [object] Labels to match to allow traffic from other namespaces
-  ## @param networkPolicy.ingressNSPodMatchLabels [object] Pod labels to match to allow traffic from other namespaces
-  ##
-  ingressNSMatchLabels: {}
-  ingressNSPodMatchLabels: {}
+  # Need to re-allow the backend app and DNS
+ 
+  extraEgress:
+    - ports:
+        - port: 3000    # our mock backend port
+      to:
+        - podSelector:
+            matchLabels:
+              app: mock-backend
+    - ports:
+        - port: 53      # DNS — required for internal resolution
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+
+
+  ingressNSMatchLabels:
+    kubernetes.io/metadata.name: ingress-nginx
+
+
+  ingressNSPodMatchLabels:
+    app.kubernetes.io/name: ingress-nginx
+
 ## Gateway API HTTP routing parameters
 ## ref: https://gateway-api.sigs.k8s.io/guides/http-routing/
 ##
