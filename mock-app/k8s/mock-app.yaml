@@ -40,8 +40,8 @@ spec:
           # Replace with your image after docker build & push:
           # docker build -t your-registry/mock-app:latest .
           # docker push your-registry/mock-app:latest
-          image: your-registry/mock-app:latest
-          imagePullPolicy: Always
+          image: mock-app:latest
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000
 
