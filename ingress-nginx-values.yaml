@@ -13,6 +13,7 @@
 #   ingress-nginx-controller in the ingress-nginx namespace. The controller
 #   reads this ConfigMap at startup and writes the values into its nginx.conf.
 #   You can inspect the result with:
+# adding conflicting change to file 
 #     kubectl get configmap ingress-nginx-controller -n ingress-nginx -o yaml
 #
 controller:
